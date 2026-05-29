@@ -1,11 +1,11 @@
 """
 steganography/__init__.py —— 鲁棒水印模块
 
-基于DCT频域的盲水印方案（4象限独立嵌入）：
-- alpha=0.5 确保经uint8量化后信号稳定
-- 强化QIM：始终保证系数差异 >= alpha*1.5
-- 4象限独立循环嵌入：天然抗裁剪
-- 多副本表决提取：提高准确率
+基于DCT频域的盲水印方案：
+- alpha=5.0：确保经uint8量化后DCT系数关系稳定
+- 智能嵌入：大图像4象限（抗剪切），小图像全局（容量充足）
+- 16bit同步头 + (3,1)重复编码：高容错提取
+- 多副本表决：避免假匹配导致的乱码
 
 接口规范：
     embed_watermark(image_path, watermark_text, output_path) -> dict

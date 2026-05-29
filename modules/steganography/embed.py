@@ -1,10 +1,17 @@
 """steganography/embed.py —— 水印嵌入模块
 
-基于DCT频域的鲁棒数字水印（4象限独立循环嵌入方案）
+基于DCT频域的鲁棒数字水印（智能象限/全局混合嵌入）
 
-抗裁剪机制：
-    将图像均分为4个象限，每个象限内部独立循环嵌入完整数据帧。
-    提取时对每个象限独立解码，综合表决。
+嵌入策略：
+    1. 计算数据帧长度
+    2. 如果每象限容量 >= 帧长度 → 4象限独立嵌入（抗剪切）
+    3. 否则 → 全局一维循环嵌入（容量充足，抗上下裁剪）
+
+关键修复（解决"guixiang→guixianf"问题）：
+    - alpha=5.0：确保经uint8量化后DCT系数关系仍稳定
+    - 强制差异>=alpha：无论原始系数如何，都确保目标关系
+    - np.round()代替astype()：四舍五入比截断更公平
+    - 16bit同步头：降低假匹配概率
 """
 
 import cv2
@@ -14,9 +21,9 @@ import os
 BLOCK_SIZE = 8
 POS1 = (2, 3)
 POS2 = (3, 2)
-SYNC_HEADER = [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0]
+SYNC_HEADER = [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0]  # 16bit
 REPEAT = 3
-DEFAULT_ALPHA = 0.5  # 从0.18提高到0.5，确保经uint8量化后信号仍稳定
+DEFAULT_ALPHA = 5.0  # 大幅提高，确保uint8量化后信号稳定
 
 
 def _text_to_bits(text: str) -> list:
@@ -57,30 +64,24 @@ def _calculate_psnr(original: np.ndarray, processed: np.ndarray) -> float:
 
 def _qim_modify(dct_block: np.ndarray, bit: int, alpha: float) -> np.ndarray:
     """
-    强化QIM：确保IDCT->uint8量化->DCT后，系数关系仍然稳定。
-    关键改进：无论原始关系如何，都确保两个系数的差异 >= alpha。
+    强化QIM：无条件确保系数关系正确，且差异 >= alpha。
+    解决原方案"关系正确但不修改"导致信号丢失的问题。
     """
     p1, p2 = POS1, POS2
     c1, c2 = float(dct_block[p1]), float(dct_block[p2])
 
-    # 计算当前差异
-    diff = c1 - c2
-
     if bit == 1:
-        # 需要 c1 > c2，且差异 >= alpha
-        if diff < alpha:
-            # 强制设置差异为 alpha * 1.5（留有余量对抗量化噪声）
-            target_diff = alpha * 1.5
+        # 必须 c1 > c2，且差异 >= alpha
+        if c1 <= c2 or (c1 - c2) < alpha:
             mid = (c1 + c2) / 2.0
-            dct_block[p1] = mid + target_diff / 2
-            dct_block[p2] = mid - target_diff / 2
+            dct_block[p1] = mid + alpha / 2.0
+            dct_block[p2] = mid - alpha / 2.0
     else:
-        # 需要 c2 > c1，即 c1 - c2 <= -alpha
-        if diff > -alpha:
-            target_diff = alpha * 1.5
+        # 必须 c2 > c1，即 c1 - c2 <= -alpha
+        if c2 <= c1 or (c2 - c1) < alpha:
             mid = (c1 + c2) / 2.0
-            dct_block[p1] = mid - target_diff / 2
-            dct_block[p2] = mid + target_diff / 2
+            dct_block[p1] = mid - alpha / 2.0
+            dct_block[p2] = mid + alpha / 2.0
 
     return dct_block
 
@@ -158,27 +159,30 @@ class Watermarker:
 
             frame_len = len(frame_bits)
             quadrants = _get_quadrants(h, w)
-            min_blocks = float("inf")
+
+            # 检查每象限容量
+            min_quad_blocks = float("inf")
             for y0, y1, x0, x1 in quadrants:
                 bh = (y1 - y0) // self.block_size
                 bw = (x1 - x0) // self.block_size
                 total = bh * bw
-                if total < min_blocks:
-                    min_blocks = total
+                if total < min_quad_blocks:
+                    min_quad_blocks = total
 
-            if min_blocks < frame_len:
-                return {
-                    "success": False,
-                    "error": (
-                        f"图像容量不足。最小象限仅有{min_blocks}个块，"
-                        f"需要{frame_len}个块。建议图像尺寸至少 256x256 像素。"
-                    ),
-                }
+            use_quadrants = min_quad_blocks >= frame_len
 
-            for y0, y1, x0, x1 in quadrants:
-                self._embed_in_region(y_channel, frame_bits, y0, y1, x0, x1)
+            if use_quadrants:
+                # 4象限独立嵌入
+                for y0, y1, x0, x1 in quadrants:
+                    self._embed_in_region(y_channel, frame_bits, y0, y1, x0, x1)
+                mode = "quadrant"
+            else:
+                # 全局一维循环嵌入（容量充足）
+                self._embed_in_region(y_channel, frame_bits, 0, h, 0, w)
+                mode = "global"
 
-            ycrcb[:, :, 0] = np.clip(y_channel, 0, 255).astype(np.uint8)
+            # 关键修复：四舍五入代替截断
+            ycrcb[:, :, 0] = np.clip(np.round(y_channel), 0, 255).astype(np.uint8)
             watermarked = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
 
             out_dir = os.path.dirname(output_path)
@@ -194,7 +198,8 @@ class Watermarker:
                 "psnr": round(float(psnr), 2),
                 "watermark_length": wm_len,
                 "frame_length": frame_len,
-                "min_quadrant_blocks": min_blocks,
+                "embed_mode": mode,
+                "quadrant_capacity": min_quad_blocks if use_quadrants else 0,
             }
 
         except Exception as e:
