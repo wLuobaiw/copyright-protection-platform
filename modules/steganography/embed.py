@@ -1,12 +1,18 @@
 """steganography/embed.py —— 水印嵌入模块
 
-基于DCT频域的鲁棒数字水印（周期性循环嵌入方案）
+基于DCT频域的鲁棒数字水印（4象限独立循环嵌入方案）
 
 抗裁剪机制：
-    将 [同步头+长度+水印数据] 构成的数据帧进行(3,1)重复编码后，
-    周期性循环嵌入到图像的每一个8x8 DCT块中。
-    即使图像被裁剪，剩余块中仍包含完整的数据帧副本，
-    提取时通过滑动窗口搜索同步头即可恢复。
+    将图像均分为4个象限（左上/右上/左下/右下），
+    每个象限内部独立进行一维循环嵌入完整数据帧。
+    提取时对每个象限独立解码，综合表决。
+
+    边缘裁剪场景：
+    - 顶部裁剪 → 左下、右下象限完整保留 → 可提取
+    - 底部裁剪 → 左上、右上象限完整保留 → 可提取
+    - 左侧裁剪 → 右上、右下象限完整保留 → 可提取
+    - 右侧裁剪 → 左上、左下象限完整保留 → 可提取
+    - 中心裁剪 → 4象限各保留部分，通过多副本容错提取
 """
 
 import cv2
@@ -15,10 +21,11 @@ import os
 
 # ========== 常量配置 ==========
 BLOCK_SIZE = 8
-POS1 = (2, 3)   # 中频系数位置1
-POS2 = (3, 2)   # 中频系数位置2
-SYNC_HEADER = [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0]  # 16bit同步头
-REPEAT = 3      # (3,1)重复编码
+POS1 = (2, 3)
+POS2 = (3, 2)
+SYNC_HEADER = [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0]
+REPEAT = 3
+NUM_QUADRANTS = 4  # 2x2 象限划分
 
 
 # ========== 工具函数 ==========
@@ -42,7 +49,6 @@ def _bits_to_text(bits: list) -> str:
         for j in range(8):
             byte = (byte << 1) | bits[i + j]
         bytes_data.append(byte)
-    # 移除末尾零填充
     while bytes_data and bytes_data[-1] == 0:
         bytes_data.pop()
     try:
@@ -57,7 +63,7 @@ def _repeat_encode(bits: list, repeat: int = REPEAT) -> list:
 
 
 def _calculate_psnr(original: np.ndarray, processed: np.ndarray) -> float:
-    """计算PSNR（峰值信噪比）"""
+    """计算PSNR"""
     mse = np.mean((original.astype(np.float64) - processed.astype(np.float64)) ** 2)
     if mse == 0:
         return float("inf")
@@ -65,10 +71,7 @@ def _calculate_psnr(original: np.ndarray, processed: np.ndarray) -> float:
 
 
 def _qim_modify(dct_block: np.ndarray, bit: int, alpha: float) -> np.ndarray:
-    """
-    QIM（量化索引调制）核心逻辑
-    通过保持/反转两个中频系数的相对大小关系来编码 0/1
-    """
+    """QIM量化索引调制"""
     p1, p2 = POS1, POS2
     if bit == 1:
         if dct_block[p1] <= dct_block[p2]:
@@ -93,6 +96,24 @@ def _qim_modify(dct_block: np.ndarray, bit: int, alpha: float) -> np.ndarray:
     return dct_block
 
 
+def _get_quadrants(h: int, w: int) -> list:
+    """
+    将图像划分为4个象限（像素坐标）
+    返回: [(y0, y1, x0, x1), ...]
+    """
+    mid_h = h // 2
+    mid_w = w // 2
+    # 确保边界对齐到BLOCK_SIZE的倍数
+    mid_h = (mid_h // BLOCK_SIZE) * BLOCK_SIZE
+    mid_w = (mid_w // BLOCK_SIZE) * BLOCK_SIZE
+    return [
+        (0, mid_h, 0, mid_w),         # 左上
+        (0, mid_h, mid_w, w),         # 右上
+        (mid_h, h, 0, mid_w),         # 左下
+        (mid_h, h, mid_w, w),         # 右下
+    ]
+
+
 # ========== 核心类 ==========
 
 class Watermarker:
@@ -106,40 +127,54 @@ class Watermarker:
         self.sync_header = SYNC_HEADER
 
     def _build_frame(self, watermark_text: str) -> tuple:
-        """
-        构建完整数据帧
-        :return: (重复编码后的bit列表, 原始水印bit长度)
-        """
+        """构建完整数据帧"""
         watermark_bits = _text_to_bits(watermark_text)
         length = len(watermark_bits)
         if length > 65535:
             raise ValueError("水印文本过长（最大支持65535 bit，约8KB）")
-
         length_bits = [(length >> i) & 1 for i in range(15, -1, -1)]
         data_bits = self.sync_header + length_bits + watermark_bits
         frame_bits = _repeat_encode(data_bits, REPEAT)
         return frame_bits, length
 
-    def embed(self, image_path: str, watermark_text: str, output_path: str) -> dict:
-        """
-        嵌入水印到图像
+    def _embed_in_region(self, y_channel: np.ndarray, frame_bits: list,
+                         y0: int, y1: int, x0: int, x1: int) -> None:
+        """在指定区域内循环嵌入数据帧"""
+        region_h = y1 - y0
+        region_w = x1 - x0
+        num_blocks_h = region_h // self.block_size
+        num_blocks_w = region_w // self.block_size
+        frame_len = len(frame_bits)
+        alpha = self.alpha
 
-        数据帧周期性循环嵌入所有DCT块，天然抗裁剪。
-        """
+        for i in range(num_blocks_h):
+            for j in range(num_blocks_w):
+                block_idx = i * num_blocks_w + j
+                bit = frame_bits[block_idx % frame_len]
+
+                by0 = y0 + i * self.block_size
+                by1 = by0 + self.block_size
+                bx0 = x0 + j * self.block_size
+                bx1 = bx0 + self.block_size
+
+                block = y_channel[by0:by1, bx0:bx1]
+                if block.shape[0] != self.block_size or block.shape[1] != self.block_size:
+                    continue
+                dct_block = cv2.dct(block)
+                dct_block = _qim_modify(dct_block, bit, alpha)
+                y_channel[by0:by1, bx0:bx1] = cv2.idct(dct_block)
+
+    def embed(self, image_path: str, watermark_text: str, output_path: str) -> dict:
+        """嵌入水印到图像（4象限独立循环嵌入）"""
         try:
             img = cv2.imread(image_path)
             if img is None:
                 return {"success": False, "error": f"无法读取图像: {image_path}"}
             original = img.copy()
 
-            # YCrCb色彩空间，仅处理Y通道（亮度）
             ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
             y_channel = ycrcb[:, :, 0].astype(np.float32)
-
             h, w = y_channel.shape
-            num_blocks_h = h // self.block_size
-            num_blocks_w = w // self.block_size
-            total_blocks = num_blocks_h * num_blocks_w
 
             # 构建数据帧
             try:
@@ -148,37 +183,33 @@ class Watermarker:
                 return {"success": False, "error": str(e)}
 
             frame_len = len(frame_bits)
-            if total_blocks < frame_len:
-                min_size = self.block_size * int(np.ceil(np.sqrt(frame_len)))
+
+            # 检查最小象限容量
+            quadrants = _get_quadrants(h, w)
+            min_blocks = float("inf")
+            for y0, y1, x0, x1 in quadrants:
+                bh = (y1 - y0) // self.block_size
+                bh = (y1 - y0) // self.block_size
+                bw = (x1 - x0) // self.block_size
+                total = bh * bw
+                if total < min_blocks:
+                    min_blocks = total
+
+            if min_blocks < frame_len:
                 return {
                     "success": False,
                     "error": (
-                        f"图像容量不足。需要{frame_len}个DCT块，当前仅有{total_blocks}个块。"
-                        f"建议图像尺寸至少为 {min_size}x{min_size} 像素。"
+                        f"图像容量不足。最小象限仅有{min_blocks}个块，"
+                        f"需要{frame_len}个块。建议图像尺寸至少 256x256 像素。"
                     ),
                 }
 
-            # 周期性嵌入：每个块嵌入 frame_bits[block_idx % frame_len]
-            y_modified = y_channel.copy()
-            alpha = self.alpha
+            # 4象限独立嵌入
+            for y0, y1, x0, x1 in quadrants:
+                self._embed_in_region(y_channel, frame_bits, y0, y1, x0, x1)
 
-            for i in range(num_blocks_h):
-                for j in range(num_blocks_w):
-                    block_idx = i * num_blocks_w + j
-                    bit = frame_bits[block_idx % frame_len]
-
-                    y0 = i * self.block_size
-                    y1 = (i + 1) * self.block_size
-                    x0 = j * self.block_size
-                    x1 = (j + 1) * self.block_size
-
-                    block = y_modified[y0:y1, x0:x1]
-                    dct_block = cv2.dct(block)
-                    dct_block = _qim_modify(dct_block, bit, alpha)
-                    y_modified[y0:y1, x0:x1] = cv2.idct(dct_block)
-
-            # 合并回图像
-            ycrcb[:, :, 0] = np.clip(y_modified, 0, 255).astype(np.uint8)
+            # 保存
+            ycrcb[:, :, 0] = np.clip(y_channel, 0, 255).astype(np.uint8)
             watermarked = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
 
             out_dir = os.path.dirname(output_path)
@@ -194,8 +225,7 @@ class Watermarker:
                 "psnr": round(float(psnr), 2),
                 "watermark_length": wm_len,
                 "frame_length": frame_len,
-                "total_blocks": total_blocks,
-                "repeat_times": total_blocks // frame_len,
+                "min_quadrant_blocks": min_blocks,
             }
 
         except Exception as e:
@@ -205,14 +235,6 @@ class Watermarker:
 # ========== 模块统一接口 ==========
 
 def embed_watermark(image_path: str, watermark_text: str, output_path: str, **kwargs) -> dict:
-    """
-    嵌入水印
-
-    :param image_path: 原始图像路径（OpenCV支持的格式）
-    :param watermark_text: 要嵌入的水印文本
-    :param output_path: 输出图像路径（建议.png以无损保存水印）
-    :param kwargs: alpha - 水印强度，默认0.18（范围0.1~0.3）
-    :return: {"success": bool, "output_path": str, "psnr": float, ...}
-    """
+    """嵌入水印"""
     watermarker = Watermarker(alpha=kwargs.get("alpha", 0.18))
     return watermarker.embed(image_path, watermark_text, output_path)
