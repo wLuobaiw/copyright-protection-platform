@@ -32,7 +32,6 @@ function renderGallery(works) {
         <div class="gallery-item">
             <img src="${w.image}" alt="${w.original_name}" loading="lazy">
             <div class="gallery-info">
-                <div class="copyright">${escapeHtml(w.watermark)}</div>
                 <div class="meta">${w.original_name}</div>
                 <div class="meta">发布: ${w.published_at}</div>
             </div>
