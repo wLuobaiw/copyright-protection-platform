@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}作品管理 - 数字版权保护平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📤 作品管理</h2>
+    <p style="color:#888;margin-bottom:1.5rem;">
+        上传原创作品，系统将自动嵌入版权水印。完成后可发布到作品展示页。
+    </p>
+
+    <!-- 上传区域 -->
+    <div class="step-section">
+        <h3>① 选择文件并填写版权信息</h3>
+        <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">📁</div>
+            <p id="upload-hint">点击或拖拽图片到此处上传</p>
+            <p style="font-size:0.8rem;color:#aaa;">支持 JPG / PNG / BMP</p>
+            <input type="file" id="file-input" accept="image/*">
+        </div>
+
+        <div class="form-group" style="margin-top:1rem;">
+            <label for="watermark-text">② 版权信息</label>
+            <input type="text" id="watermark-text"
+                   placeholder="例如：©张三 2026-05"
+                   maxlength="200">
+        </div>
+
+        <button class="btn btn-primary" id="btn-embed" disabled>
+            ③ 开始嵌入水印
+        </button>
+    </div>
+
+    <!-- 处理结果 -->
+    <div id="result-area" style="display:none;" class="step-section">
+        <h3>处理结果</h3>
+        <div id="result-content"></div>
+        <button class="btn btn-success" id="btn-publish" style="display:none;margin-top:1rem;">
+            发布到展示页
+        </button>
+    </div>
+
+    <!-- 预览 -->
+    <div id="preview-area" style="display:none;margin-top:1rem;">
+        <p style="font-weight:600;margin-bottom:0.5rem;">预览：</p>
+        <img id="preview-img" style="max-width:300px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+    </div>
+</div>
+
+<!-- 已发布列表 -->
+<div class="card">
+    <h2>已发布作品列表</h2>
+    <div id="works-list">
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>暂无已发布作品</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}侵权取证与鉴定 - 数字版权保护平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔍 侵权取证与鉴定</h2>
+    <p style="color:#888;margin-bottom:1.5rem;">
+        上传疑似侵权文件 → 填写取证元信息 → 执行技术鉴定 → 打包证据压缩包
+    </p>
+
+    <!-- 第1步：上传嫌疑文件 -->
+    <div class="step-section">
+        <h3>第1步：上传嫌疑文件</h3>
+        <div class="upload-zone" id="forensics-upload-zone">
+            <div class="upload-icon">🔍</div>
+            <p id="forensics-upload-hint">点击上传疑似被侵权的文件</p>
+            <p style="font-size:0.8rem;color:#aaa;">支持图片文件</p>
+            <input type="file" id="forensics-file-input" accept="image/*">
+        </div>
+        <p id="upload-status" style="margin-top:0.5rem;color:#888;"></p>
+    </div>
+
+    <!-- 第2步：填写元信息 -->
+    <div class="step-section" id="step-metadata" style="display:none;">
+        <h3>第2步：填写取证元信息</h3>
+        <div class="form-group">
+            <label for="source-url">来源URL</label>
+            <input type="text" id="source-url"
+                   placeholder="例如：https://example.com/post/123">
+        </div>
+        <div class="form-group">
+            <label for="capture-time">截取时间</label>
+            <input type="datetime-local" id="capture-time">
+        </div>
+        <div class="form-group">
+            <label for="publisher">发布者</label>
+            <input type="text" id="publisher"
+                   placeholder="例如：盗图狗123">
+        </div>
+        <div class="form-group">
+            <label for="forensics-notes">取证说明</label>
+            <textarea id="forensics-notes"
+                      placeholder="补充说明取证背景..."></textarea>
+        </div>
+        <div class="form-group">
+            <label for="officer-name">取证人员</label>
+            <input type="text" id="officer-name"
+                   placeholder="你的姓名" value="取证员">
+        </div>
+        <div class="form-group">
+            <label for="expected-watermark">原始版权信息（可选，用于比对）</label>
+            <input type="text" id="expected-watermark"
+                   placeholder="例如：©张三 2026-05">
+        </div>
+    </div>
+
+    <!-- 第3步：执行鉴定 -->
+    <div class="step-section" id="step-identify" style="display:none;">
+        <h3>第3步：执行鉴定</h3>
+        <button class="btn btn-primary" id="btn-identify">开始鉴定</button>
+
+        <div id="log-area" style="display:none;margin-top:1rem;">
+            <p style="font-weight:600;margin-bottom:0.5rem;">鉴定日志：</p>
+            <div class="log-panel" id="log-panel"></div>
+        </div>
+
+        <div id="conclusion-area" style="display:none;"></div>
+    </div>
+
+    <!-- 第4步：打包证据 -->
+    <div class="step-section" id="step-package" style="display:none;">
+        <h3>第4步：打包证据</h3>
+        <button class="btn btn-success" id="btn-package">生成证据压缩包</button>
+
+        <div id="package-result" style="display:none;margin-top:1rem;">
+            <p style="font-weight:600;">证据包内容预览：</p>
+            <ul class="file-list" id="file-list"></ul>
+            <p style="margin-top:1rem;">
+                压缩包 SHA-256：
+                <span class="hash-text" id="package-hash"></span>
+            </p>
+            <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+                <a class="btn btn-primary" id="btn-download" href="#" download>
+                    📥 下载证据压缩包
+                </a>
+                <button class="btn btn-outline" id="btn-copy-hash">
+                    📋 复制哈希值
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/forensics.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}数字版权保护平台{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">🛡 数字版权保护平台</a>
+            <ul class="nav-links">
+                <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">作品展示</a></li>
+                <li><a href="/admin/" class="{% if request.path.startswith('/admin') %}active{% endif %}">作品管理</a></li>
+                <li><a href="/forensics/" class="{% if request.path.startswith('/forensics') %}active{% endif %}">侵权取证与鉴定</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>数据安全与隐私保护课程实践 &copy; 2026</p>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

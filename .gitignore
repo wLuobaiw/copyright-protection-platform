@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+venv/
+.env
+
+# 上传和运行时数据
+static/uploads/*
+!static/uploads/.gitkeep
+data/originals/*
+!data/originals/.gitkeep
+data/watermarked/*
+!data/watermarked/.gitkeep
+data/evidence_packages/*
+!data/evidence_packages/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/works.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

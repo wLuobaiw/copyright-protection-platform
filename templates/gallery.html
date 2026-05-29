@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}作品展示 - 数字版权保护平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📁 作品展示画廊</h2>
+    <p style="color:#888;margin-bottom:1rem;">
+        以下为已发布的作品，所有作品均嵌入了数字水印以保护版权。
+    </p>
+    <div id="gallery-container" class="gallery-grid">
+        <div class="empty-state">
+            <div class="empty-icon">🖼</div>
+            <p>暂无作品，请前往"作品管理"页面上传。</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
+{% endblock %}
