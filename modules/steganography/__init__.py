@@ -1,13 +1,13 @@
 """
 steganography/__init__.py —— 鲁棒水印模块
 
-基于DCT频域的盲水印方案，具备以下特性：
-- 周期性循环嵌入：数据帧重复填满所有DCT块，天然抗裁剪
-- 中频QIM调制：抵抗JPEG压缩、高斯/椒盐噪声、亮度/对比度调整
-- 16bit同步头 + (3,1)重复编码：高容错提取
-- 滑动窗口搜索：自动定位水印位置，无需知道原始图像尺寸
+基于DCT频域的盲水印方案（4象限独立嵌入）：
+- alpha=0.5 确保经uint8量化后信号稳定
+- 强化QIM：始终保证系数差异 >= alpha*1.5
+- 4象限独立循环嵌入：天然抗裁剪
+- 多副本表决提取：提高准确率
 
-接口规范（与README一致）：
+接口规范：
     embed_watermark(image_path, watermark_text, output_path) -> dict
     extract_watermark(image_path) -> dict
 """
