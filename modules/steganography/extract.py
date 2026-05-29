@@ -1,11 +1,6 @@
 """steganography/extract.py —— 水印提取模块
 
 基于DCT频域的盲水印提取（4象限独立解码 + 多副本表决）
-
-抗裁剪提取：
-    将图像按与嵌入相同的规则划分为4个象限，
-    对每个象限独立进行一维循环解码和同步头搜索。
-    收集所有象限的候选结果，通过出现频率表决得出最终水印。
 """
 
 import cv2
@@ -18,31 +13,29 @@ from .embed import (
     POS2,
     SYNC_HEADER,
     REPEAT,
+    DEFAULT_ALPHA,
     _bits_to_text,
     _get_quadrants,
 )
 
-
-# ========== 工具函数 ==========
 
 def _repeat_decode(bits: list, repeat: int = REPEAT) -> list:
     """重复解码：多数表决（3取2）"""
     decoded = []
     for i in range(0, len(bits) - repeat + 1, repeat):
         chunk = bits[i : i + repeat]
-        decoded.append(1 if sum(chunk) > repeat // 2 else 0)
+        decoded.append(1 if sum(chunk) >= 2 else 0)  # >=2 而不是 >1，更宽松
     return decoded
 
 
 def _calc_confidence(raw_bits: list, repeat: int = REPEAT) -> float:
-    """计算提取置信度"""
     if len(raw_bits) < repeat:
         return 0.0
     agreements = 0
     total = 0
     for i in range(0, len(raw_bits) - repeat + 1, repeat):
         chunk = raw_bits[i : i + repeat]
-        majority = 1 if sum(chunk) > repeat // 2 else 0
+        majority = 1 if sum(chunk) >= 2 else 0
         agreements += sum(1 for b in chunk if b == majority)
         total += len(chunk)
     return (agreements / total) * 100.0 if total > 0 else 0.0
@@ -75,19 +68,23 @@ def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
             bit = 1 if dct_block[p1] > dct_block[p2] else 0
             raw_bits.append(bit)
 
-    if len(raw_bits) < len(sync_header) * REPEAT + 16 * REPEAT + 8:
+    header_len = len(sync_header)
+    # 最小需要：同步头 + 16bit长度 + 至少1字节(8bit)数据
+    min_raw_bits = (header_len + 16 + 8) * REPEAT
+    if len(raw_bits) < min_raw_bits:
         return []
 
     decoded_bits = _repeat_decode(raw_bits, REPEAT)
     confidence = _calc_confidence(raw_bits, REPEAT)
 
-    header_len = len(sync_header)
     min_need = header_len + 16 + 1
     candidates = []
 
     for i in range(len(decoded_bits) - min_need + 1):
         if decoded_bits[i : i + header_len] == sync_header:
             start = i + header_len
+            if start + 16 > len(decoded_bits):
+                continue
             length_bits = decoded_bits[start : start + 16]
             wm_len = 0
             for bit in length_bits:
@@ -99,19 +96,18 @@ def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
                 if wm_end <= len(decoded_bits):
                     wm_bits = decoded_bits[wm_start:wm_end]
                     wm_text = _bits_to_text(wm_bits)
-                    if wm_text and any(c.isprintable() for c in wm_text):
-                        candidates.append((wm_text, confidence))
+                    # 更宽松的过滤：只要有可打印字符且长度合理
+                    if wm_text and len(wm_text) >= 1 and len(wm_text) <= 8192:
+                        # 检查是否包含过多乱码字符（非ASCII且非中文）
+                        printable_count = sum(1 for c in wm_text if c.isprintable() or ord(c) > 127)
+                        if printable_count >= len(wm_text) * 0.5:  # 至少50%可打印
+                            candidates.append((wm_text, confidence))
 
     return candidates
 
 
-# ========== 核心类 ==========
-
 class WatermarkerExtractor(Watermarker):
-    """DCT水印提取器"""
-
     def extract(self, image_path: str) -> dict:
-        """从图像中提取水印（4象限独立提取 + 多副本表决）"""
         try:
             img = cv2.imread(image_path)
             if img is None:
@@ -131,8 +127,8 @@ class WatermarkerExtractor(Watermarker):
                     valid_regions += 1
                     all_candidates.extend(cands)
 
+            # 如果象限提取失败，尝试全局提取（兼容旧方案或极端裁剪）
             if not all_candidates:
-                # 所有象限都未找到，尝试全局提取（兼容旧方案或极端裁剪）
                 cands = _extract_from_region(y_channel, 0, h, 0, w, self.sync_header)
                 if cands:
                     all_candidates.extend(cands)
@@ -144,13 +140,14 @@ class WatermarkerExtractor(Watermarker):
                     "error": "未找到有效水印数据。图像可能未嵌入水印，或经历了严重破坏。",
                 }
 
-            # 多副本表决：统计各文本出现次数，取最频繁的
+            # 多副本表决
             texts = [c[0] for c in all_candidates]
             most_common = Counter(texts).most_common(1)[0]
             best_text, count = most_common
 
-            # 计算平均置信度
-            avg_conf = sum(c[1] for c in all_candidates if c[0] == best_text) / count
+            # 计算最佳文本的平均置信度
+            confidences = [c[1] for c in all_candidates if c[0] == best_text]
+            avg_conf = sum(confidences) / len(confidences) if confidences else 0
 
             return {
                 "success": True,
@@ -167,9 +164,6 @@ class WatermarkerExtractor(Watermarker):
             return {"success": False, "error": str(e)}
 
 
-# ========== 模块统一接口 ==========
-
 def extract_watermark(image_path: str, **kwargs) -> dict:
-    """提取水印"""
-    extractor = WatermarkerExtractor(alpha=kwargs.get("alpha", 0.18))
+    extractor = WatermarkerExtractor(alpha=kwargs.get("alpha", DEFAULT_ALPHA))
     return extractor.extract(image_path)
