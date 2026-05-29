@@ -86,6 +86,8 @@ document.addEventListener("DOMContentLoaded", () => {
         logPanel.innerHTML = "";
         conclusionArea.style.display = "none";
         stepPackage.style.display = "none";
+        stepRobustness.style.display = "none";
+        robustnessResult.style.display = "none";
 
         const formData = new FormData();
         formData.append("session_id", sessionId);
@@ -125,13 +127,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const level = data.conclusion.judgment_level || "";
                 let levelBadge = "";
                 if (level === "supported") {
-                    levelBadge = '<span class="status-badge error" style="background:#d32f2f;">⚠ 侵权认定</span>';
+                    levelBadge = '<span class="status-badge" style="background:#d32f2f;color:#fff;">⚠ 侵权认定</span>';
                 } else if (level === "suspicious") {
-                    levelBadge = '<span class="status-badge" style="background:#f57c00;">⚠ 存在嫌疑</span>';
+                    levelBadge = '<span class="status-badge" style="background:#f57c00;color:#fff;">⚠ 存在嫌疑</span>';
                 } else if (level === "inconclusive") {
-                    levelBadge = '<span class="status-badge" style="background:#888;">❓ 证据不足</span>';
+                    levelBadge = '<span class="status-badge" style="background:#888;color:#fff;">❓ 证据不足</span>';
                 } else if (level === "error") {
-                    levelBadge = '<span class="status-badge error">❌ 鉴定异常</span>';
+                    levelBadge = '<span class="status-badge" style="background:#fee2e2;color:#dc2626;">❌ 鉴定异常</span>';
                 }
 
                 // ELA 异常标识
@@ -200,8 +202,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 elaImageArea.style.display = "none";
             }
 
-            // 显示第4步
+            // 显示第4步和第5步
             stepPackage.style.display = "block";
+            stepRobustness.style.display = "block";
 
         } catch (err) {
             logPanel.innerHTML += `<div class="log-entry fail">鉴定失败: ${err.message}</div>`;
@@ -253,6 +256,106 @@ document.addEventListener("DOMContentLoaded", () => {
         } finally {
             btnPackage.disabled = false;
             btnPackage.textContent = "生成证据压缩包";
+        }
+    });
+
+    // --- 获取鲁棒性测试相关元素 ---
+    const stepRobustness = document.getElementById("step-robustness");
+    const btnRobustness = document.getElementById("btn-robustness");
+    const robustnessResult = document.getElementById("robustness-result");
+    const robustnessSummary = document.getElementById("robustness-summary");
+    const robustnessPerAttack = document.getElementById("robustness-per-attack");
+    const robustnessTbody = document.getElementById("robustness-tbody");
+
+    // --- 第5步：鲁棒性测试 ---
+    btnRobustness.addEventListener("click", async () => {
+        if (!sessionId) {
+            alert("请先上传文件");
+            return;
+        }
+
+        btnRobustness.disabled = true;
+        btnRobustness.textContent = "测试中...";
+        robustnessResult.style.display = "none";
+
+        const formData = new FormData();
+        formData.append("session_id", sessionId);
+        formData.append("expected_watermark",
+            document.getElementById("expected-watermark").value);
+
+        try {
+            const resp = await fetch("/forensics/api/forensics/robustness", {
+                method: "POST",
+                body: formData,
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert("鲁棒性测试失败: " + (data.message || "未知错误"));
+                return;
+            }
+
+            robustnessResult.style.display = "block";
+
+            // 汇总信息
+            const s = data.summary;
+            robustnessSummary.innerHTML = `
+                <div class="conclusion-row">
+                    <span>总测试数</span><span>${s.total_tests}</span>
+                </div>
+                <div class="conclusion-row">
+                    <span>水印存活次数</span>
+                    <span class="pass">${s.survived}</span>
+                </div>
+                <div class="conclusion-row">
+                    <span>总存活率</span>
+                    <span class="${s.survival_rate >= 0.5 ? 'pass' : 'fail'}">
+                        ${(s.survival_rate * 100).toFixed(1)}%
+                    </span>
+                </div>
+            `;
+
+            // 各攻击类型存活率
+            robustnessPerAttack.innerHTML = (s.per_attack_summary || []).map(a => {
+                const pct = (a.rate * 100).toFixed(0);
+                const color = a.rate >= 0.67 ? "#059669" :
+                              a.rate >= 0.33 ? "#f57c00" : "#dc2626";
+                return `
+                    <div style="display:flex;align-items:center;gap:0.75rem;
+                                padding:0.35rem 0;border-bottom:1px solid #eee;">
+                        <span style="min-width:70px;font-weight:600;">${a.attack}</span>
+                        <span class="robustness-bar-wrap">
+                            <span class="robustness-bar"
+                                  style="width:${pct}%;background:${color};"></span>
+                        </span>
+                        <span style="color:${color};font-weight:700;min-width:40px;">${pct}%</span>
+                        <span style="color:#888;font-size:0.8rem;">
+                            (${a.survived}/${a.total})
+                        </span>
+                    </div>`;
+            }).join("");
+
+            // 详细结果表
+            robustnessTbody.innerHTML = data.results.map(r => `
+                <tr>
+                    <td>${r.attack}</td>
+                    <td>${r.level}</td>
+                    <td>${r.extracted || '<span style="color:#dc2626;">提取失败</span>'}</td>
+                    <td>${r.confidence ? r.confidence.toFixed(1) + "%" : "-"}</td>
+                    <td>${r.match
+                        ? '<span class="survived">✅</span>'
+                        : '<span class="dead">❌</span>'}</td>
+                    <td class="${r.survived ? 'survived' : 'dead'}">
+                        ${r.survived ? '✅ 存活' : '❌ 丢失'}
+                    </td>
+                </tr>
+            `).join("");
+
+        } catch (err) {
+            alert("鲁棒性测试请求失败: " + err.message);
+        } finally {
+            btnRobustness.disabled = false;
+            btnRobustness.textContent = "开始鲁棒性测试";
         }
     });
 

@@ -97,9 +97,41 @@
                 </button>
             </div>
         </div>
+    <!-- 第5步：水印鲁棒性测试 -->
+    <div class="step-section" id="step-robustness" style="display:none;">
+        <h3>第5步：水印鲁棒性测试（可选）</h3>
+        <p style="color:#888;margin-bottom:0.75rem;">
+            对嫌疑文件施加多种攻击（压缩/噪声/模糊/裁剪），测试水印在不同条件下的存活率，
+            评估水印方案的实际抗攻击能力。
+        </p>
+        <button class="btn btn-primary" id="btn-robustness">开始鲁棒性测试</button>
+
+        <div id="robustness-result" style="display:none;margin-top:1rem;">
+            <p style="font-weight:600;margin-bottom:0.5rem;">测试摘要：</p>
+            <div id="robustness-summary" class="conclusion-panel"></div>
+
+            <p style="font-weight:600;margin:1rem 0 0.5rem;">各攻击类型存活率：</p>
+            <div id="robustness-per-attack"></div>
+
+            <p style="font-weight:600;margin:1rem 0 0.5rem;">详细测试结果：</p>
+            <div style="overflow-x:auto;">
+                <table class="robustness-table" id="robustness-table">
+                    <thead>
+                        <tr>
+                            <th>攻击类型</th>
+                            <th>攻击等级</th>
+                            <th>提取结果</th>
+                            <th>置信度</th>
+                            <th>匹配</th>
+                            <th>存活</th>
+                        </tr>
+                    </thead>
+                    <tbody id="robustness-tbody"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
-{% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/forensics.js') }}"></script>

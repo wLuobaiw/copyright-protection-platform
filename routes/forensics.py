@@ -10,6 +10,7 @@ from modules.forensics.hasher import compute_sha256
 from modules.forensics.metadata import create_metadata_json
 from modules.forensics.packager import build_evidence_package
 from modules.verification.validator import run_identification
+from modules.verification.robustness import run_robustness_test
 
 forensics_bp = Blueprint("forensics", __name__, url_prefix="/forensics")
 
@@ -149,3 +150,21 @@ def serve_ela_image(session_id, filename):
         return jsonify({"success": False, "message": "ELA图片不存在"}), 404
 
     return send_file(ela_image_path, mimetype="image/png")
+
+
+@forensics_bp.route("/api/forensics/robustness", methods=["POST"])
+def robustness_test():
+    """水印鲁棒性测试：对已上传的嫌疑文件施加多种攻击，测试水印存活率"""
+    session_id = request.form.get("session_id")
+    if not session_id or session_id not in _session_data:
+        return jsonify({"success": False, "message": "会话不存在，请先上传文件"}), 400
+
+    suspect_path = _session_data[session_id]["suspect_path"]
+    expected_watermark = request.form.get("expected_watermark", None)
+
+    result = run_robustness_test(suspect_path, expected_watermark)
+
+    # 暂存到会话，供后续打包时附带
+    _session_data[session_id]["robustness_result"] = result
+
+    return jsonify(result)

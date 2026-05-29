@@ -1,7 +1,7 @@
 /**
- * 作品展示画廊 - B 负责完善
+ * 作品展示画廊
  *
- * 页面加载时从 /api/gallery/works 获取作品列表并渲染。
+ * 仅展示最新发布的一张作品图片。
  */
 document.addEventListener("DOMContentLoaded", () => {
     loadGallery();
@@ -19,7 +19,10 @@ async function loadGallery() {
 
 function renderGallery(works) {
     const container = document.getElementById("gallery-container");
-    if (works.length === 0) {
+
+    // 过滤掉无效条目（缺少 image 的脏数据），只保留有效作品
+    const valid = works.filter(w => w && typeof w === "object" && w.image);
+    if (valid.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">🖼</div>
@@ -28,16 +31,13 @@ function renderGallery(works) {
         return;
     }
 
-    container.innerHTML = works.map(w => `
-        <div class="gallery-item">
-            <img src="${w.image}" alt="${w.original_name}" loading="lazy">
-            <div class="gallery-info">
-                <div class="copyright">${escapeHtml(w.watermark)}</div>
-                <div class="meta">${w.original_name}</div>
-                <div class="meta">发布: ${w.published_at}</div>
-            </div>
-        </div>
-    `).join("");
+    // 只展示最新发布的一张
+    const latest = valid[valid.length - 1];
+
+    container.innerHTML = `
+        <div class="featured-image">
+            <img src="${latest.image}" alt="${escapeHtml(latest.original_name || '')}" loading="lazy">
+        </div>`;
 }
 
 function escapeHtml(str) {

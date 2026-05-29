@@ -221,7 +221,19 @@ body {
     display: none;
 }
 
-/* --- 画廊网格 --- */
+/* --- 画廊 / 单图展示 --- */
+.featured-image {
+    text-align: center;
+}
+.featured-image img {
+    max-width: 100%;
+    max-height: 60vh;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    object-fit: contain;
+}
+
+/* --- 画廊网格（保留以防后续扩展） --- */
 .gallery-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -443,6 +455,58 @@ body {
     color: #888;
     font-size: 0.9rem;
     line-height: 1.5;
+}
+
+/* --- 鲁棒性测试表格 --- */
+.robustness-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.robustness-table th {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+}
+
+.robustness-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid #eee;
+}
+
+.robustness-table tr:hover td {
+    background: #f8fafc;
+}
+
+.robustness-table .survived {
+    color: #059669;
+    font-weight: 700;
+}
+
+.robustness-table .dead {
+    color: #dc2626;
+}
+
+.robustness-bar {
+    display: inline-block;
+    height: 8px;
+    border-radius: 4px;
+    background: #4a6cf7;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
+.robustness-bar-wrap {
+    display: inline-block;
+    width: 80px;
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-right: 0.5rem;
 }
 
 /* --- 响应式 --- */
