@@ -1,24 +1,33 @@
 /**
- * 作品管理（后台上传 + 水印嵌入）- B 负责完善
+ * 作品管理（后台上传 + 水印嵌入）
  *
- * 流程：选择文件 → 填写版权信息 → 嵌入水印 → 预览 → 发布到展示页
+ * 流程：选择文件 → 填写版权信息 → 嵌入水印 → 发布到展示页
  */
-document.addEventListener("DOMContentLoaded", () => {
-    const uploadZone = document.getElementById("upload-zone");
-    const fileInput = document.getElementById("file-input");
-    const watermarkInput = document.getElementById("watermark-text");
-    const btnEmbed = document.getElementById("btn-embed");
-    const btnPublish = document.getElementById("btn-publish");
-    const resultArea = document.getElementById("result-area");
-    const resultContent = document.getElementById("result-content");
-    const uploadHint = document.getElementById("upload-hint");
+(function () {
+    // 获取所有 DOM 元素，缺失时抛出明确错误
+    function getEl(id) {
+        const el = document.getElementById(id);
+        if (!el) {
+            throw new Error(`页面缺少元素 #${id}，请清除浏览器缓存后刷新 (Ctrl+Shift+R)`);
+        }
+        return el;
+    }
+
+    const uploadZone = getEl("upload-zone");
+    const fileInput = getEl("file-input");
+    const watermarkInput = getEl("watermark-text");
+    const btnEmbed = getEl("btn-embed");
+    const btnPublish = getEl("btn-publish");
+    const resultArea = getEl("result-area");
+    const resultContent = getEl("result-content");
+    const uploadHint = getEl("upload-hint");
+    const worksContainer = getEl("works-list");
 
     let currentResult = null;
     let selectedFile = null;
 
     // --- 上传区域交互 ---
     uploadZone.addEventListener("click", () => fileInput.click());
-
     uploadZone.addEventListener("dragover", (e) => {
         e.preventDefault();
         uploadZone.classList.add("drag-over");
@@ -31,11 +40,8 @@ document.addEventListener("DOMContentLoaded", () => {
         uploadZone.classList.remove("drag-over");
         handleFile(e.dataTransfer.files[0]);
     });
-
     fileInput.addEventListener("change", () => {
-        if (fileInput.files.length > 0) {
-            handleFile(fileInput.files[0]);
-        }
+        if (fileInput.files.length > 0) handleFile(fileInput.files[0]);
     });
 
     function handleFile(file) {
@@ -49,7 +55,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     watermarkInput.addEventListener("input", checkEmbedReady);
-
     function checkEmbedReady() {
         btnEmbed.disabled = !(selectedFile && watermarkInput.value.trim());
     }
@@ -70,7 +75,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: "POST",
                 body: formData,
             });
-            const data = await resp.json();
+            // 响应非 JSON 时给出明确提示
+            const text = await resp.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (_) {
+                throw new Error("服务器返回了非JSON响应，状态码 " + resp.status + "。请检查 Flask 是否正常运行。");
+            }
 
             resultArea.style.display = "block";
             if (data.success) {
@@ -83,7 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 btnPublish.style.display = "inline-block";
             } else {
                 resultContent.innerHTML = `
-                    <p>❌ 嵌入失败: ${escapeHtml(data.error || data.message || '未知错误')}</p>
+                    <p>❌ 嵌入失败: ${escapeHtml(data.error || data.message || "未知错误")}</p>
                 `;
                 currentResult = null;
                 btnPublish.style.display = "none";
@@ -135,69 +147,64 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- 加载已发布列表 ---
     loadWorksList();
-});
 
-async function loadWorksList() {
-    try {
-        const resp = await fetch("/admin/api/admin/works");
-        const data = await resp.json();
-        const container = document.getElementById("works-list");
+    async function loadWorksList() {
+        try {
+            const resp = await fetch("/admin/api/admin/works");
+            const data = await resp.json();
 
-        if (!data.works || data.works.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📭</div>
-                    <p>暂无已发布作品</p>
-                </div>`;
-            return;
-        }
+            if (!data.works || data.works.length === 0) {
+                worksContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <p>暂无已发布作品</p>
+                    </div>`;
+                return;
+            }
 
-        container.innerHTML = data.works.map(w => `
-            <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid #eee;">
-                <img src="${w.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;">
-                <div style="flex:1;min-width:0;">
-                    <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(w.original_name)}</div>
-                    <div style="font-size:0.8rem;color:#059669;margin-top:0.15rem;">🔏 ${escapeHtml(w.watermark)}</div>
-                    <div style="font-size:0.8rem;color:#999;margin-top:0.1rem;">${w.published_at}</div>
+            worksContainer.innerHTML = data.works.map(w => `
+                <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid #eee;">
+                    <img src="${w.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(w.original_name)}</div>
+                        <div style="font-size:0.8rem;color:#059669;margin-top:0.15rem;">🔏 ${escapeHtml(w.watermark)}</div>
+                        <div style="font-size:0.8rem;color:#999;margin-top:0.1rem;">${w.published_at}</div>
+                    </div>
+                    <button class="btn-danger" onclick="deleteWork('${w.id}', this)" title="删除此作品">
+                        🗑 删除
+                    </button>
                 </div>
-                <button class="btn-danger" onclick="deleteWork('${w.id}', this)" title="删除此作品">
-                    🗑 删除
-                </button>
-            </div>
-        `).join("");
-    } catch (err) {
-        console.error("加载作品列表失败:", err);
+            `).join("");
+        } catch (err) {
+            console.error("加载作品列表失败:", err);
+        }
     }
-}
 
-async function deleteWork(workId, btn) {
-    if (!confirm("确定要删除该作品吗？此操作不可撤销。")) return;
-
-    btn.disabled = true;
-    btn.textContent = "删除中...";
-
-    try {
-        const resp = await fetch(`/admin/api/admin/works/${workId}`, {
-            method: "DELETE",
-        });
-        const data = await resp.json();
-
-        if (data.success) {
-            loadWorksList();  // 刷新列表
-        } else {
-            alert("删除失败: " + data.message);
+    // --- 删除 ---
+    window.deleteWork = async function (workId, btn) {
+        if (!confirm("确定要删除该作品吗？此操作不可撤销。")) return;
+        btn.disabled = true;
+        btn.textContent = "删除中...";
+        try {
+            const resp = await fetch(`/admin/api/admin/works/${workId}`, { method: "DELETE" });
+            const data = await resp.json();
+            if (data.success) {
+                loadWorksList();
+            } else {
+                alert("删除失败: " + data.message);
+                btn.disabled = false;
+                btn.textContent = "🗑 删除";
+            }
+        } catch (err) {
+            alert("请求失败: " + err.message);
             btn.disabled = false;
             btn.textContent = "🗑 删除";
         }
-    } catch (err) {
-        alert("请求失败: " + err.message);
-        btn.disabled = false;
-        btn.textContent = "🗑 删除";
-    }
-}
+    };
 
-function escapeHtml(str) {
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
-}
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+    }
+})();
