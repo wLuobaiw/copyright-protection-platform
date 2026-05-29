@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}水印鲁棒性测试 - 数字版权保护平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔬 水印鲁棒性测试</h2>
+    <p style="color:#888;margin-bottom:1.5rem;">
+        上传含水印图片，输入原始水印文本，系统将对图片施加多种攻击并验证水印是否仍可提取。
+    </p>
+
+    <!-- 步骤1：上传 -->
+    <div class="step-section">
+        <h3>① 上传含水印图片</h3>
+        <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">📁</div>
+            <p id="upload-hint">点击或拖拽图片到此处上传</p>
+            <p style="font-size:0.8rem;color:#aaa;">支持 JPG / PNG / BMP</p>
+            <input type="file" id="file-input" accept="image/*">
+        </div>
+    </div>
+
+    <!-- 步骤2：输入水印文本 -->
+    <div class="step-section" id="step-watermark" style="display:none;">
+        <h3>② 输入原始水印文本</h3>
+        <div class="form-group">
+            <label for="watermark-text">原始水印内容</label>
+            <input type="text" id="watermark-text"
+                   placeholder="例如：©张三 2026-05"
+                   maxlength="200">
+        </div>
+        <button class="btn btn-primary" id="btn-test" disabled>
+            ③ 开始鲁棒性测试
+        </button>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="loading-area" style="display:none;text-align:center;padding:2rem;">
+        <p style="font-size:1.2rem;">⏳ 正在执行攻击测试，请稍候...</p>
+        <p style="color:#888;">共 24 项测试（5种攻击 × 多个强度级别）</p>
+    </div>
+
+    <!-- 测试结果 -->
+    <div id="result-area" style="display:none;">
+        <h3>📊 测试结果</h3>
+
+        <!-- 总结 -->
+        <div id="summary-area" style="margin-bottom:1.5rem;"></div>
+
+        <!-- 结果表格 -->
+        <div style="overflow-x:auto;">
+            <table id="result-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f5f5f5;">
+                        <th style="padding:0.6rem;text-align:left;border-bottom:2px solid #ddd;">攻击类型</th>
+                        <th style="padding:0.6rem;text-align:left;border-bottom:2px solid #ddd;">强度参数</th>
+                        <th style="padding:0.6rem;text-align:left;border-bottom:2px solid #ddd;">提取结果</th>
+                        <th style="padding:0.6rem;text-align:center;border-bottom:2px solid #ddd;">匹配状态</th>
+                        <th style="padding:0.6rem;text-align:right;border-bottom:2px solid #ddd;">置信度</th>
+                    </tr>
+                </thead>
+                <tbody id="result-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/robustness.js') }}"></script>
+{% endblock %}

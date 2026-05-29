@@ -15,6 +15,7 @@
                 <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">作品展示</a></li>
                 <li><a href="/admin/" class="{% if request.path.startswith('/admin') %}active{% endif %}">作品管理</a></li>
                 <li><a href="/forensics/" class="{% if request.path.startswith('/forensics') %}active{% endif %}">侵权取证与鉴定</a></li>
+                <li><a href="/robustness/" class="{% if request.path.startswith('/robustness') %}active{% endif %}">鲁棒性测试</a></li>
             </ul>
         </div>
     </nav>
