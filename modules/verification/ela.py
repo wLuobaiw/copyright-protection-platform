@@ -10,7 +10,7 @@ ELA (Error Level Analysis) 误差水平分析 - D 负责实现
     -> {"status": str, "anomaly_detected": bool, "detail": str}
 """
 
-from PIL import Image, ImageChops, ImageEnhance
+from PIL import Image
 import numpy as np
 import os
 import tempfile

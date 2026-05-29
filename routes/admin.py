@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import time
 import uuid
 
@@ -68,25 +69,26 @@ def publish_work():
     src = os.path.join(config.WATERMARKED_DIR, watermarked_filename)
     dst = os.path.join(config.UPLOADS_DIR, watermarked_filename)
     if os.path.exists(src):
-        import shutil
         shutil.copy2(src, dst)
 
     # 更新作品列表
-    works = {}
+    works_data = {"works": []}
     if os.path.exists(config.WORKS_JSON):
         with open(config.WORKS_JSON, "r", encoding="utf-8") as f:
-            works = json.load(f)
+            works_data = json.load(f)
 
-    works[work_id] = {
+    # 取出现有作品列表（兼容旧格式），追加新作品
+    works_list = works_data.get("works", [])
+    works_list.append({
         "id": work_id,
         "original_name": original_name,
         "watermark": watermark_text,
         "image": f"/static/uploads/{watermarked_filename}",
         "published_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
+    })
 
     with open(config.WORKS_JSON, "w", encoding="utf-8") as f:
-        json.dump({"works": list(works.values())}, f, ensure_ascii=False, indent=2)
+        json.dump({"works": works_list}, f, ensure_ascii=False, indent=2)
 
     return jsonify({"success": True, "message": "发布成功"})
 
