@@ -120,18 +120,55 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.conclusion) {
                 currentConclusion = data.conclusion;
                 conclusionArea.style.display = "block";
+
+                // 判断等级标识
+                const level = data.conclusion.judgment_level || "";
+                let levelBadge = "";
+                if (level === "supported") {
+                    levelBadge = '<span class="status-badge error" style="background:#d32f2f;">⚠ 侵权认定</span>';
+                } else if (level === "suspicious") {
+                    levelBadge = '<span class="status-badge" style="background:#f57c00;">⚠ 存在嫌疑</span>';
+                } else if (level === "inconclusive") {
+                    levelBadge = '<span class="status-badge" style="background:#888;">❓ 证据不足</span>';
+                } else if (level === "error") {
+                    levelBadge = '<span class="status-badge error">❌ 鉴定异常</span>';
+                }
+
+                // ELA 异常标识
+                const elaAnomaly = data.conclusion.ela_anomaly_detected;
+                const elaRatio = data.conclusion.ela_anomaly_ratio != null
+                    ? (data.conclusion.ela_anomaly_ratio * 100).toFixed(2) + "%" : "N/A";
+
+                // 水印匹配方式
+                const matchMethod = data.conclusion.watermark_match_method || "none";
+                let matchMethodLabel = "";
+                if (matchMethod === "exact") matchMethodLabel = "（精确匹配）";
+                else if (matchMethod === "substring") matchMethodLabel = "（部分匹配）";
+                else if (matchMethod === "fuzzy") matchMethodLabel = "（模糊匹配）";
+
+                // 水印相似度
+                const similarity = data.conclusion.watermark_similarity != null
+                    ? (data.conclusion.watermark_similarity * 100).toFixed(1) + "%" : "N/A";
+
                 conclusionArea.innerHTML = `
-                    <h3 style="margin-top:1rem;">鉴定结论</h3>
+                    <h3 style="margin-top:1rem;">
+                        鉴定结论 ${levelBadge}
+                    </h3>
                     <div class="conclusion-panel">
                         <div class="conclusion-row">
-                            <span>文件SHA-256</span>
-                            <span class="hash-text">${data.conclusion.file_sha256 || "N/A"}</span>
+                            <span>文件 SHA-256</span>
+                            <span class="hash-text" style="word-break:break-all;">${data.conclusion.file_sha256 || "N/A"}</span>
                         </div>
                         <div class="conclusion-row">
-                            <span>ELA检测</span>
-                            <span class="${data.conclusion.ela_result && !data.conclusion.ela_result.includes('篡改') ? 'pass' : 'fail'}">
-                                ${data.conclusion.ela_result || "N/A"}
+                            <span>ELA 篡改检测</span>
+                            <span class="${elaAnomaly ? 'fail' : 'pass'}">
+                                ${elaAnomaly ? '⚠ 发现异常' : '✅ 未发现异常'}
+                                （异常像素占比: ${elaRatio}）
                             </span>
+                        </div>
+                        <div class="conclusion-row">
+                            <span>ELA 详细结果</span>
+                            <span style="font-size:0.85rem;color:#888;">${data.conclusion.ela_result || "N/A"}</span>
                         </div>
                         <div class="conclusion-row">
                             <span>水印提取</span>
@@ -141,14 +178,26 @@ document.addEventListener("DOMContentLoaded", () => {
                             <span>权属比对</span>
                             <span class="${data.conclusion.watermark_match ? 'pass' : 'fail'}">
                                 ${data.conclusion.watermark_match ? '✅ 匹配' : '❌ 不匹配'}
+                                ${matchMethodLabel}
+                                ${data.conclusion.watermark_similarity != null ? '（相似度: ' + similarity + '）' : ''}
                             </span>
                         </div>
-                        <div class="conclusion-row">
-                            <span>最终结论</span>
-                            <span>${data.conclusion.final_judgment || "N/A"}</span>
+                        <div class="conclusion-row" style="background:#fafafa;border-radius:6px;padding:0.75rem;">
+                            <span style="font-weight:700;">最终结论</span>
+                            <span style="font-size:0.95rem;line-height:1.5;">${data.conclusion.final_judgment || "N/A"}</span>
                         </div>
                     </div>
                 `;
+            }
+
+            // 渲染 ELA 热力图
+            const elaImageArea = document.getElementById("ela-image-area");
+            const elaImage = document.getElementById("ela-image");
+            if (data.ela_image_url) {
+                elaImage.src = data.ela_image_url;
+                elaImageArea.style.display = "block";
+            } else {
+                elaImageArea.style.display = "none";
             }
 
             // 显示第4步
