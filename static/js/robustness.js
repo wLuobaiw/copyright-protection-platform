@@ -104,7 +104,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // 渲染总结
             const s = data.summary;
-            const scoreColor = s.robustness_score >= 80 ? "#4caf50" :
+            const scoreColor = s.robustness_score >= 95 ? "#4caf50" :
+                               s.robustness_score >= 80 ? "#2e7d32" :
                                s.robustness_score >= 50 ? "#f57c00" : "#f44336";
             summaryArea.innerHTML = `
                 <div style="display:flex;gap:2rem;align-items:center;flex-wrap:wrap;">
@@ -135,6 +136,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     : '<span style="color:#f44336;font-weight:600;">❌ 失败</span>';
                 const extractedText = r.extracted || (r.error ? `错误: ${r.error}` : "未提取到");
                 const extractedStyle = r.matched ? "color:#333;" : "color:#f44336;";
+                const similarity = r.similarity != null ? (r.similarity * 100).toFixed(0) + "%" : "-";
+                const matchTypeColor = r.match_type === "精确匹配" ? "#4caf50" :
+                                       r.match_type === "子串匹配" ? "#2e7d32" :
+                                       r.match_type === "相似匹配" ? "#f57c00" : "#999";
 
                 return `
                     <tr style="background:${rowBg};">
@@ -142,6 +147,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         <td style="padding:0.5rem;border-bottom:1px solid #eee;">${r.parameter}</td>
                         <td style="padding:0.5rem;border-bottom:1px solid #eee;${extractedStyle}max-width:300px;word-break:break-all;">${extractedText}</td>
                         <td style="padding:0.5rem;border-bottom:1px solid #eee;text-align:center;">${matchBadge}</td>
+                        <td style="padding:0.5rem;border-bottom:1px solid #eee;text-align:center;color:${matchTypeColor};font-size:0.85rem;">${r.match_type}</td>
+                        <td style="padding:0.5rem;border-bottom:1px solid #eee;text-align:right;">${similarity}</td>
                         <td style="padding:0.5rem;border-bottom:1px solid #eee;text-align:right;">${r.confidence}%</td>
                     </tr>
                 `;
