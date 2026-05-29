@@ -16,6 +16,23 @@ import time
 import cv2
 import numpy as np
 
+
+def _imread(path: str):
+    """cv2.imread 在 Windows 上不支持中文路径，用 imdecode 绕过"""
+    data = np.fromfile(path, dtype=np.uint8)
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+
+def _imwrite(path: str, img: np.ndarray) -> bool:
+    """cv2.imwrite 在 Windows 上不支持中文路径，用 imencode + tofile 绕过"""
+    ext = os.path.splitext(path)[1]
+    success, buf = cv2.imencode(ext, img)
+    if success:
+        buf.tofile(path)
+    return success
+
 from modules.steganography.extract import extract_watermark
 
 # 攻击参数配置
@@ -127,7 +144,7 @@ def run_robustness_test(image_path: str, expected_watermark: str = None) -> dict
     if not os.path.isfile(image_path):
         return {"success": False, "message": f"文件不存在: {image_path}"}
 
-    img = cv2.imread(image_path)
+    img = _imread(image_path)
     if img is None:
         return {"success": False, "message": f"无法读取图片: {image_path}"}
 
@@ -168,7 +185,7 @@ def run_robustness_test(image_path: str, expected_watermark: str = None) -> dict
                         tmp_dir,
                         f"attacked_{attack_name}_{level}.png",
                     )
-                    cv2.imwrite(tmp_path, attacked)
+                    _imwrite(tmp_path, attacked)
 
                     # 尝试提取水印
                     ext_result = extract_watermark(tmp_path)

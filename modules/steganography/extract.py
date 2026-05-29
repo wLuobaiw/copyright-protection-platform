@@ -21,6 +21,7 @@ from .embed import (
     DEFAULT_ALPHA,
     _bits_to_text,
     _get_quadrants,
+    _imread,
 )
 
 
@@ -111,7 +112,7 @@ def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
 class WatermarkerExtractor(Watermarker):
     def extract(self, image_path: str) -> dict:
         try:
-            img = cv2.imread(image_path)
+            img = _imread(image_path)
             if img is None:
                 return {"success": False, "error": f"无法读取图像: {image_path}"}
 

@@ -18,6 +18,23 @@ import cv2
 import numpy as np
 import os
 
+
+def _imread(path: str):
+    """cv2.imread 在 Windows 上不支持中文路径，用 imdecode 绕过"""
+    data = np.fromfile(path, dtype=np.uint8)
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+
+def _imwrite(path: str, img: np.ndarray) -> bool:
+    """cv2.imwrite 在 Windows 上不支持中文路径，用 imencode + tofile 绕过"""
+    ext = os.path.splitext(path)[1]
+    success, buf = cv2.imencode(ext, img)
+    if success:
+        buf.tofile(path)
+    return success
+
 BLOCK_SIZE = 8
 POS1 = (2, 3)
 POS2 = (3, 2)
@@ -143,7 +160,7 @@ class Watermarker:
 
     def embed(self, image_path: str, watermark_text: str, output_path: str) -> dict:
         try:
-            img = cv2.imread(image_path)
+            img = _imread(image_path)
             if img is None:
                 return {"success": False, "error": f"无法读取图像: {image_path}"}
             original = img.copy()
@@ -188,7 +205,7 @@ class Watermarker:
             out_dir = os.path.dirname(output_path)
             if out_dir:
                 os.makedirs(out_dir, exist_ok=True)
-            cv2.imwrite(output_path, watermarked)
+            _imwrite(output_path, watermarked)
 
             psnr = _calculate_psnr(original, watermarked)
 

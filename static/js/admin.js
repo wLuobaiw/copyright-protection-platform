@@ -11,8 +11,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnPublish = document.getElementById("btn-publish");
     const resultArea = document.getElementById("result-area");
     const resultContent = document.getElementById("result-content");
-    const previewArea = document.getElementById("preview-area");
-    const previewImg = document.getElementById("preview-img");
     const uploadHint = document.getElementById("upload-hint");
 
     let currentResult = null;
@@ -83,13 +81,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 `;
                 currentResult = data;
                 btnPublish.style.display = "inline-block";
-
-                // 预览
-                previewArea.style.display = "block";
-                previewImg.src = data.watermarked_url;
             } else {
                 resultContent.innerHTML = `
-                    <p>❌ 嵌入失败: ${escapeHtml(data.message)}</p>
+                    <p>❌ 嵌入失败: ${escapeHtml(data.error || data.message || '未知错误')}</p>
                 `;
                 currentResult = null;
                 btnPublish.style.display = "none";
@@ -160,15 +154,45 @@ async function loadWorksList() {
 
         container.innerHTML = data.works.map(w => `
             <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid #eee;">
-                <img src="${w.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;">
-                <div style="flex:1;">
-                    <div style="font-weight:600;">${escapeHtml(w.original_name)}</div>
-                    <div style="font-size:0.85rem;color:#888;">${escapeHtml(w.watermark)} · ${w.published_at}</div>
+                <img src="${w.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(w.original_name)}</div>
+                    <div style="font-size:0.8rem;color:#059669;margin-top:0.15rem;">🔏 ${escapeHtml(w.watermark)}</div>
+                    <div style="font-size:0.8rem;color:#999;margin-top:0.1rem;">${w.published_at}</div>
                 </div>
+                <button class="btn-danger" onclick="deleteWork('${w.id}', this)" title="删除此作品">
+                    🗑 删除
+                </button>
             </div>
         `).join("");
     } catch (err) {
         console.error("加载作品列表失败:", err);
+    }
+}
+
+async function deleteWork(workId, btn) {
+    if (!confirm("确定要删除该作品吗？此操作不可撤销。")) return;
+
+    btn.disabled = true;
+    btn.textContent = "删除中...";
+
+    try {
+        const resp = await fetch(`/admin/api/admin/works/${workId}`, {
+            method: "DELETE",
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            loadWorksList();  // 刷新列表
+        } else {
+            alert("删除失败: " + data.message);
+            btn.disabled = false;
+            btn.textContent = "🗑 删除";
+        }
+    } catch (err) {
+        alert("请求失败: " + err.message);
+        btn.disabled = false;
+        btn.textContent = "🗑 删除";
     }
 }
 

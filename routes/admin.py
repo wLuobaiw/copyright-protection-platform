@@ -33,12 +33,19 @@ def upload_work():
     original_path = os.path.join(config.ORIGINALS_DIR, f"{unique_id}{ext}")
     file.save(original_path)
 
-    # 嵌入水印
-    watermarked_path = os.path.join(config.WATERMARKED_DIR, f"{unique_id}_wm{ext}")
+    # 嵌入水印 —— 直接输出到 uploads 目录供前端访问
+    watermarked_filename = f"{unique_id}_wm{ext}"
+    watermarked_path = os.path.join(config.UPLOADS_DIR, watermarked_filename)
+    # 同时保留一份到 watermarked 目录做存档
+    archive_path = os.path.join(config.WATERMARKED_DIR, watermarked_filename)
     result = embed_watermark(original_path, watermark_text, watermarked_path)
 
     if not result["success"]:
         return jsonify(result), 500
+
+    # 存档副本（发布时可能用到）
+    if watermarked_path != archive_path:
+        shutil.copy2(watermarked_path, archive_path)
 
     # 自验证：从嵌入后的图中提取水印
     verify = extract_watermark(watermarked_path)
@@ -49,7 +56,7 @@ def upload_work():
         "original_name": file.filename,
         "psnr": result.get("psnr"),
         "watermark_verified": verify.get("watermark") if verify["success"] else None,
-        "watermarked_url": f"/static/uploads/{unique_id}_wm{ext}",
+        "watermarked_url": f"/static/uploads/{watermarked_filename}",
     })
 
 
@@ -101,3 +108,36 @@ def list_works():
     with open(config.WORKS_JSON, "r", encoding="utf-8") as f:
         data = json.load(f)
     return jsonify(data)
+
+
+@admin_bp.route("/api/admin/works/<work_id>", methods=["DELETE"])
+def delete_work(work_id):
+    """从作品列表中删除指定作品，同时清理关联图片文件"""
+    if not os.path.exists(config.WORKS_JSON):
+        return jsonify({"success": False, "message": "作品列表为空"}), 404
+
+    with open(config.WORKS_JSON, "r", encoding="utf-8") as f:
+        works_data = json.load(f)
+
+    works_list = works_data.get("works", [])
+    # 找到要删除的作品（记录其图片路径以便清理文件）
+    target = next((w for w in works_list if w.get("id") == work_id), None)
+    if target is None:
+        return jsonify({"success": False, "message": "作品不存在"}), 404
+
+    # 尝试删除关联的图片文件（uploads 目录下的副本）
+    image_path = target.get("image", "")
+    if image_path.startswith("/static/uploads/"):
+        file_to_delete = os.path.join(config.UPLOADS_DIR, os.path.basename(image_path))
+        if os.path.exists(file_to_delete):
+            try:
+                os.remove(file_to_delete)
+            except OSError:
+                pass  # 文件删除失败不影响记录删除
+
+    # 过滤掉被删除的作品，写回
+    new_works = [w for w in works_list if w.get("id") != work_id]
+    with open(config.WORKS_JSON, "w", encoding="utf-8") as f:
+        json.dump({"works": new_works}, f, ensure_ascii=False, indent=2)
+
+    return jsonify({"success": True, "message": "作品已删除"})

@@ -1,7 +1,7 @@
 /**
  * 作品展示画廊
  *
- * 仅展示最新发布的一张作品图片。
+ * 以网格列表展示所有已发布作品，每项显示缩略图、文件名和发布时间。
  */
 document.addEventListener("DOMContentLoaded", () => {
     loadGallery();
@@ -20,8 +20,11 @@ async function loadGallery() {
 function renderGallery(works) {
     const container = document.getElementById("gallery-container");
 
-    // 过滤掉无效条目（缺少 image 的脏数据），只保留有效作品
-    const valid = works.filter(w => w && typeof w === "object" && w.image);
+    // 过滤掉无效条目（缺 image 的脏数据），按发布时间降序排列
+    const valid = works
+        .filter(w => w && typeof w === "object" && w.image)
+        .sort((a, b) => (b.published_at || "").localeCompare(a.published_at || ""));
+
     if (valid.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -31,13 +34,15 @@ function renderGallery(works) {
         return;
     }
 
-    // 只展示最新发布的一张
-    const latest = valid[valid.length - 1];
-
-    container.innerHTML = `
-        <div class="featured-image">
-            <img src="${latest.image}" alt="${escapeHtml(latest.original_name || '')}" loading="lazy">
-        </div>`;
+    container.innerHTML = valid.map(w => `
+        <div class="gallery-item">
+            <img src="${w.image}" alt="${escapeHtml(w.original_name || '')}" loading="lazy">
+            <div class="gallery-info">
+                <div class="gallery-filename">${escapeHtml(w.original_name || '未知文件')}</div>
+                <div class="gallery-time">${escapeHtml(w.published_at || '')}</div>
+            </div>
+        </div>
+    `).join("");
 }
 
 function escapeHtml(str) {

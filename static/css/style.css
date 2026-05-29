@@ -270,10 +270,44 @@ body {
     font-size: 0.95rem;
 }
 
+.gallery-item .gallery-filename {
+    font-weight: 600;
+    color: #1a1a2e;
+    font-size: 0.9rem;
+    /* 长文件名截断 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gallery-item .gallery-time {
+    font-size: 0.8rem;
+    color: #999;
+    margin-top: 0.25rem;
+}
+
 .gallery-item .gallery-info .meta {
     font-size: 0.8rem;
     color: #999;
     margin-top: 0.35rem;
+}
+
+/* --- 删除按钮 --- */
+.btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.btn-danger:hover {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
 }
 
 /* --- 日志区域 --- */
