@@ -1,6 +1,11 @@
 """steganography/extract.py —— 水印提取模块
 
-基于DCT频域的盲水印提取（4象限独立解码 + 多副本表决）
+基于DCT频域的盲水印提取（智能象限/全局混合提取）
+
+提取策略：
+    1. 尝试4象限独立提取
+    2. 如果4象限都失败，尝试全局提取
+    3. 多候选表决 + 严格过滤，避免假匹配
 """
 
 import cv2
@@ -20,11 +25,10 @@ from .embed import (
 
 
 def _repeat_decode(bits: list, repeat: int = REPEAT) -> list:
-    """重复解码：多数表决（3取2）"""
     decoded = []
     for i in range(0, len(bits) - repeat + 1, repeat):
         chunk = bits[i : i + repeat]
-        decoded.append(1 if sum(chunk) >= 2 else 0)  # >=2 而不是 >1，更宽松
+        decoded.append(1 if sum(chunk) >= 2 else 0)
     return decoded
 
 
@@ -43,10 +47,7 @@ def _calc_confidence(raw_bits: list, repeat: int = REPEAT) -> float:
 
 def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
                          x0: int, x1: int, sync_header: list) -> list:
-    """
-    从指定区域提取候选水印列表
-    :return: [(watermark_text, confidence), ...]
-    """
+    """从指定区域提取候选水印列表"""
     region_h = y1 - y0
     region_w = x1 - x0
     num_blocks_h = region_h // BLOCK_SIZE
@@ -69,7 +70,6 @@ def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
             raw_bits.append(bit)
 
     header_len = len(sync_header)
-    # 最小需要：同步头 + 16bit长度 + 至少1字节(8bit)数据
     min_raw_bits = (header_len + 16 + 8) * REPEAT
     if len(raw_bits) < min_raw_bits:
         return []
@@ -96,11 +96,13 @@ def _extract_from_region(y_channel: np.ndarray, y0: int, y1: int,
                 if wm_end <= len(decoded_bits):
                     wm_bits = decoded_bits[wm_start:wm_end]
                     wm_text = _bits_to_text(wm_bits)
-                    # 更宽松的过滤：只要有可打印字符且长度合理
-                    if wm_text and len(wm_text) >= 1 and len(wm_text) <= 8192:
-                        # 检查是否包含过多乱码字符（非ASCII且非中文）
-                        printable_count = sum(1 for c in wm_text if c.isprintable() or ord(c) > 127)
-                        if printable_count >= len(wm_text) * 0.5:  # 至少50%可打印
+                    # 严格过滤：要求所有字符都可打印（ASCII或中文）
+                    if wm_text and 1 <= len(wm_text) <= 8192:
+                        valid_chars = sum(
+                            1 for c in wm_text
+                            if (32 <= ord(c) <= 126) or (ord(c) >= 127)
+                        )
+                        if valid_chars == len(wm_text):
                             candidates.append((wm_text, confidence))
 
     return candidates
@@ -117,17 +119,18 @@ class WatermarkerExtractor(Watermarker):
             y_channel = ycrcb[:, :, 0].astype(np.float32)
             h, w = y_channel.shape
 
-            quadrants = _get_quadrants(h, w)
             all_candidates = []
             valid_regions = 0
 
+            # 1. 尝试4象限提取
+            quadrants = _get_quadrants(h, w)
             for idx, (y0, y1, x0, x1) in enumerate(quadrants):
                 cands = _extract_from_region(y_channel, y0, y1, x0, x1, self.sync_header)
                 if cands:
                     valid_regions += 1
                     all_candidates.extend(cands)
 
-            # 如果象限提取失败，尝试全局提取（兼容旧方案或极端裁剪）
+            # 2. 4象限都失败，尝试全局提取
             if not all_candidates:
                 cands = _extract_from_region(y_channel, 0, h, 0, w, self.sync_header)
                 if cands:
@@ -145,7 +148,6 @@ class WatermarkerExtractor(Watermarker):
             most_common = Counter(texts).most_common(1)[0]
             best_text, count = most_common
 
-            # 计算最佳文本的平均置信度
             confidences = [c[1] for c in all_candidates if c[0] == best_text]
             avg_conf = sum(confidences) / len(confidences) if confidences else 0
 
@@ -155,7 +157,6 @@ class WatermarkerExtractor(Watermarker):
                 "confidence": round(float(avg_conf), 2),
                 "sync_found": True,
                 "regions_valid": valid_regions,
-                "regions_total": len(quadrants),
                 "copies_found": len(all_candidates),
                 "best_copy_count": count,
             }
