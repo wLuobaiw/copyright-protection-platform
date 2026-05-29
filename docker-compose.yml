@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginx:alpine
+    image: nginx:1.28.0
     container_name: copyright-nginx
     ports:
       - "80:80"
