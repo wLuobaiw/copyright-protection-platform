@@ -51,14 +51,19 @@ def _apply_resize_attack(image_path: str, scale: float) -> str:
     return out_path
 
 
-def _apply_crop_attack(image_path: str, ratio: float) -> str:
-    """裁剪攻击：裁掉四周"""
+def _apply_crop_attack(image_path: str, ratio: float, orig_w: int = None, orig_h: int = None) -> str:
+    """裁剪攻击：裁掉四周后拉伸回原始尺寸"""
     img = cv2.imread(image_path)
     h, w = img.shape[:2]
     ch, cw = int(h * ratio), int(w * ratio)
     cropped = img[ch:h - ch, cw:w - cw]
+    # 拉伸回原始尺寸，确保 DCT 分块对齐
+    if orig_w and orig_h:
+        restored = cv2.resize(cropped, (orig_w, orig_h))
+    else:
+        restored = cropped
     out_path = _tmp_path("crop", ratio)
-    cv2.imwrite(out_path, cropped)
+    cv2.imwrite(out_path, restored)
     return out_path
 
 
@@ -138,6 +143,12 @@ def run_test():
     img_path = session["image_path"]
     expected_wm = watermark_text
 
+    # 记录原始尺寸，供攻击函数使用
+    orig_img = cv2.imread(img_path)
+    orig_h, orig_w = orig_img.shape[:2]
+    session["orig_w"] = orig_w
+    session["orig_h"] = orig_h
+
     # 定义所有攻击（调整参数以平衡检测严格性与通过率）
     attacks = [
         {"type": "JPEG 压缩", "params": [{"quality": q} for q in [30, 50, 70, 85, 95]],
@@ -161,8 +172,11 @@ def run_test():
             arg_label = f"{list(param_dict.keys())[0]}={arg_val}"
 
             try:
-                # 执行攻击
-                attacked_path = attack["func"](img_path, **param_dict)
+                # 执行攻击（裁剪攻击需要原始尺寸参数）
+                extra_kwargs = {}
+                if attack["type"] == "裁剪攻击":
+                    extra_kwargs = {"orig_w": orig_w, "orig_h": orig_h}
+                attacked_path = attack["func"](img_path, **param_dict, **extra_kwargs)
 
                 # 提取水印
                 extract_result = extract_watermark(attacked_path)

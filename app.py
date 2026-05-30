@@ -11,11 +11,11 @@ def create_app():
     from routes.gallery import gallery_bp
     from routes.admin import admin_bp
     from routes.forensics import forensics_bp
-    from routes.robustness import robustness_bp
+    # from routes.robustness import robustness_bp
 
     app.register_blueprint(gallery_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(forensics_bp)
-    app.register_blueprint(robustness_bp)
+    # app.register_blueprint(robustness_bp)
 
     return app
